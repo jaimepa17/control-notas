@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -8,14 +8,18 @@ import {
   View,
 } from 'react-native';
 import AccountPanel from '../components/AccountPanel';
+import CarreraFormModal from '../components/CarreraFormModal';
+import ConfirmActionModal from '../components/ConfirmActionModal';
 import { supabase } from '@/lib/supabase';
+import {
+  createCarrera,
+  deleteCarrera,
+  listCarreras,
+  type Carrera as CarreraModel,
+} from '@/lib/services/carrerasService';
+import { useRealtimeTable } from '@/lib/realtime';
 
-type Carrera = {
-  id: string | number;
-  nombre?: string | null;
-  created_at?: string | null;
-  [key: string]: unknown;
-};
+type Carrera = CarreraModel;
 
 type HomeProps = {
   userEmail?: string;
@@ -42,6 +46,93 @@ export default function Home({ userEmail }: HomeProps) {
   const [loading, setLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [accountPanelVisible, setAccountPanelVisible] = useState(false);
+  const [createCarreraVisible, setCreateCarreraVisible] = useState(false);
+  const [creatingCarrera, setCreatingCarrera] = useState(false);
+  const [deletingCarreraId, setDeletingCarreraId] = useState<string | null>(null);
+  const [pendingDeleteCarrera, setPendingDeleteCarrera] = useState<Carrera | null>(null);
+  const [realtimeUserId, setRealtimeUserId] = useState<string | null>(null);
+
+  const cargarCarreras = useCallback(async () => {
+    setLoading(true);
+    const result = await listCarreras();
+
+    if (!result.ok) {
+      Alert.alert('No se pudieron cargar las carreras', result.error);
+      setCarreras([]);
+      setLoading(false);
+      return;
+    }
+
+    setCarreras(result.data);
+    setLoading(false);
+  }, []);
+
+  const openCreateCarrera = () => {
+    setCreateCarreraVisible(true);
+  };
+
+  const closeCreateCarrera = () => {
+    if (creatingCarrera) {
+      return;
+    }
+    setCreateCarreraVisible(false);
+  };
+
+  const crearNuevaCarrera = async (nombre: string) => {
+    if (creatingCarrera) {
+      return;
+    }
+
+    setCreatingCarrera(true);
+    const result = await createCarrera({ nombre });
+
+    if (!result.ok) {
+      Alert.alert('No se pudo crear la carrera', result.error);
+      setCreatingCarrera(false);
+      return;
+    }
+
+    setCarreras((prev) => [result.data, ...prev]);
+    setCreateCarreraVisible(false);
+    setCreatingCarrera(false);
+  };
+
+  const ejecutarEliminarCarrera = async (carrera: Carrera) => {
+    if (deletingCarreraId) {
+      return;
+    }
+
+    setDeletingCarreraId(carrera.id);
+    const result = await deleteCarrera(carrera.id);
+
+    if (!result.ok) {
+      Alert.alert('No se pudo eliminar la carrera', result.error);
+      setDeletingCarreraId(null);
+      return;
+    }
+
+    setCarreras((prev) => prev.filter((item) => item.id !== carrera.id));
+    setDeletingCarreraId(null);
+    setPendingDeleteCarrera(null);
+  };
+
+  const confirmarEliminarCarrera = (carrera: Carrera) => {
+    setPendingDeleteCarrera(carrera);
+  };
+
+  const cancelarEliminarCarrera = () => {
+    if (deletingCarreraId) {
+      return;
+    }
+    setPendingDeleteCarrera(null);
+  };
+
+  const confirmarEliminarDesdeModal = () => {
+    if (!pendingDeleteCarrera) {
+      return;
+    }
+    void ejecutarEliminarCarrera(pendingDeleteCarrera);
+  };
 
   const cerrarSesion = async () => {
     if (signingOut) {
@@ -81,35 +172,65 @@ export default function Home({ userEmail }: HomeProps) {
   };
 
   useEffect(() => {
-    const cargarCarreras = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('carreras')
-        .select('*')
-        .order('created_at', { ascending: false });
+    let mounted = true;
 
-      if (error) {
-        Alert.alert('No se pudieron cargar las carreras', error.message);
+    const bootstrap = async () => {
+      await cargarCarreras();
+
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) {
+        return;
       }
 
-      setCarreras((data as Carrera[]) ?? []);
-      setLoading(false);
+      setRealtimeUserId(data.session?.user?.id ?? null);
     };
 
-    cargarCarreras();
+    void bootstrap();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) {
+        return;
+      }
+      setRealtimeUserId(session?.user?.id ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [cargarCarreras]);
+
+  const handleInsertCarrera = useCallback((row: Carrera) => {
+    setCarreras((prev) => [row, ...prev.filter((item) => item.id !== row.id)]);
   }, []);
+
+  const handleUpdateCarrera = useCallback((row: Carrera) => {
+    setCarreras((prev) => prev.map((item) => (item.id === row.id ? row : item)));
+  }, []);
+
+  const handleDeleteCarrera = useCallback((row: { id: string }) => {
+    setCarreras((prev) => prev.filter((item) => item.id !== row.id));
+  }, []);
+
+  useRealtimeTable<Carrera>({
+    enabled: !!realtimeUserId,
+    table: 'carreras',
+    filter: realtimeUserId ? `profesor_id=eq.${realtimeUserId}` : undefined,
+    channelName: `realtime:carreras:${realtimeUserId ?? 'anon'}`,
+    onInsert: handleInsertCarrera,
+    onUpdate: handleUpdateCarrera,
+    onDelete: handleDeleteCarrera,
+    onForegroundSync: cargarCarreras,
+  });
 
   const renderCarrera = ({ item, index }: { item: Carrera; index: number }) => {
     const titulo =
       (typeof item.nombre === 'string' && item.nombre.trim()) ||
       `Carrera ${index + 1}`;
+    const isDeleting = deletingCarreraId === item.id;
 
     return (
-      <TouchableOpacity
-        accessibilityRole="button"
-        activeOpacity={0.9}
-        className="mb-5"
-      >
+      <View className="mb-5">
         <View className="relative">
           <View className="absolute inset-0 translate-x-2 translate-y-2 rounded-[28px] bg-black" />
           <View className="rounded-[28px] border-[3px] border-black bg-[#FDF9F1] p-6">
@@ -122,7 +243,7 @@ export default function Home({ userEmail }: HomeProps) {
               </View>
 
               <View className="rounded-full border-[3px] border-black bg-[#FFD9A0] px-3 py-2">
-                <Text className="text-xs font-black text-black">CLASE</Text>
+                <Text className="text-xs font-black text-black">CARRERA</Text>
               </View>
             </View>
 
@@ -131,43 +252,35 @@ export default function Home({ userEmail }: HomeProps) {
                 Fecha de creación
               </Text>
               <Text className="mt-1 text-base font-semibold text-black">
-                {item.created_at
-                  ? new Date(item.created_at).toLocaleDateString('es-ES')
-                  : 'Fecha no disponible'}
+                {new Date(item.created_at).toLocaleDateString('es-ES')}
               </Text>
+            </View>
+
+            <View className="mt-4 items-end">
+              <TouchableOpacity
+                accessibilityRole="button"
+                activeOpacity={0.9}
+                disabled={isDeleting}
+                onPress={() => confirmarEliminarCarrera(item)}
+                className="rounded-xl border-[3px] border-black bg-[#FFC9C2] px-4 py-2"
+              >
+                <Text className="text-sm font-black text-black">
+                  {isDeleting ? 'Eliminando...' : 'Eliminar'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
   const Header = () => (
-    <View className="mb-6">
-      <View className="mb-5 flex-row items-start justify-between">
-        <View className="flex-1 pr-4">
-          <Text className="text-4xl font-black text-[#1E140D]">¡Hola, Profe!</Text>
-          <Text className="mt-2 text-base font-medium text-[#3A2B20]">
-            Organiza tus carreras como en una libreta bonita.
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          accessibilityRole="button"
-          activeOpacity={0.9}
-          onPress={openAccountPanel}
-          className="relative"
-        >
-          <View className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-full bg-black" />
-          <View className="h-20 w-20 items-center justify-center rounded-full border-[4px] border-black bg-[#FDF9F1]">
-            <Text className="text-3xl">🐱</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      <View className="self-start rounded-full border-[3px] border-black bg-[#FDF9F1] px-5 py-2">
-        <Text className="text-sm font-black text-black">Mis Carreras</Text>
-      </View>
+    <View>
+      <Text className="text-2xl font-black text-[#1E140D]">¡Hola, Profe!</Text>
+      {/* <Text className="mt-1 text-base font-medium text-[#3A2B20]">
+        Organiza tus carreras como en una libreta bonita.
+      </Text> */}
     </View>
   );
 
@@ -187,6 +300,8 @@ export default function Home({ userEmail }: HomeProps) {
           <TouchableOpacity
             accessibilityRole="button"
             activeOpacity={0.9}
+            disabled={creatingCarrera}
+            onPress={openCreateCarrera}
             className="mt-6 rounded-2xl border-[3px] border-black bg-[#FFD98E] px-6 py-4"
           >
             <Text className="text-base font-black text-black">
@@ -209,7 +324,7 @@ export default function Home({ userEmail }: HomeProps) {
   }
 
   return (
-    <View className="flex-1 bg-[#C5A07D] px-4 pt-10 pb-4">
+    <View className="flex-1 bg-[#C5A07D] px-4 pt-12 pb-4">
       <AccountPanel
         visible={accountPanelVisible}
         onRequestClose={closeAccountPanel}
@@ -219,21 +334,73 @@ export default function Home({ userEmail }: HomeProps) {
         userEmail={userEmail}
       />
 
+      <CarreraFormModal
+        visible={createCarreraVisible}
+        submitting={creatingCarrera}
+        onClose={closeCreateCarrera}
+        onSubmit={crearNuevaCarrera}
+      />
+
+      <ConfirmActionModal
+        visible={!!pendingDeleteCarrera}
+        title="Eliminar carrera"
+        message={pendingDeleteCarrera
+          ? `¿Seguro que deseas eliminar "${pendingDeleteCarrera.nombre}"? Esta acción no se puede deshacer.`
+          : ''}
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        loading={!!deletingCarreraId}
+        onCancel={cancelarEliminarCarrera}
+        onConfirm={confirmarEliminarDesdeModal}
+      />
+
+      <View className="relative mb-4 px-1">
+        <View className="pr-24">
+          <View className="relative">
+            <View className="absolute inset-0 translate-x-1.5 translate-y-2 rounded-[30px] bg-black" />
+            <View className="rounded-[30px] border-[4px] border-black bg-[#EBD7BF] px-5 py-3.5">
+              <Header />
+            </View>
+          </View>
+        </View>
+
+        <View className="absolute right-1 -top-1">
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.9}
+            onPress={openAccountPanel}
+            className="relative"
+          >
+            <View className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-full bg-black" />
+            <View className="h-20 w-20 items-center justify-center rounded-full border-[4px] border-black bg-[#FDF9F1]">
+              <Text className="text-3xl">🐱</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <View className="relative flex-1">
         <View className="absolute inset-x-0 bottom-[-4px] h-[5px] rounded-full bg-black/90" />
         <View className="flex-1 rounded-[34px] border-[4px] border-black bg-[#F7F0E4] overflow-hidden">
           <PaperGrid />
 
+          <View className="px-5 pt-4">
+            <View className="self-start rounded-full border-[3px] border-black bg-[#F3E7D5] px-5 py-2">
+              <Text className="text-sm font-black text-black">
+                {`Carreras listadas: ${carreras.length}`}
+              </Text>
+            </View>
+          </View>
+
           <FlatList
             data={carreras}
             keyExtractor={(item, index) => String(item.id ?? index)}
             renderItem={renderCarrera}
-            ListHeaderComponent={Header}
             ListEmptyComponent={EmptyState}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               paddingHorizontal: 20,
-              paddingTop: 38,
+              paddingTop: 12,
               paddingBottom: 120,
               flexGrow: 1,
             }}
@@ -245,16 +412,20 @@ export default function Home({ userEmail }: HomeProps) {
         </View>
       </View>
 
-      <View className="absolute bottom-7 left-6">
-        <View className="absolute inset-0 translate-x-2 translate-y-2 rounded-full bg-black" />
-        <TouchableOpacity
-          accessibilityRole="button"
-          activeOpacity={0.9}
-          className="h-20 w-20 items-center justify-center rounded-full border-[4px] border-black bg-[#FFB6C9]"
-        >
-          <Text className="text-4xl font-black text-black">+</Text>
-        </TouchableOpacity>
-      </View>
+      {carreras.length > 0 ? (
+        <View className="absolute bottom-7 left-6">
+          <View className="absolute inset-0 translate-x-2 translate-y-2 rounded-full bg-black" />
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.9}
+            disabled={creatingCarrera}
+            onPress={openCreateCarrera}
+            className="h-20 w-20 items-center justify-center rounded-full border-[4px] border-black bg-[#FFB6C9]"
+          >
+            <Text className="text-4xl font-black text-black">+</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
