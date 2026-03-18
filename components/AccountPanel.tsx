@@ -1,0 +1,120 @@
+import React from 'react';
+import { Modal, Pressable, View, Text, TouchableOpacity } from 'react-native';
+
+type Props = {
+  visible: boolean;
+  onRequestClose: () => void;
+  onChangeAccount: () => void;
+  onSignOut: () => void;
+  signingOut: boolean;
+  userEmail?: string;
+};
+
+export default function AccountPanel({
+  visible,
+  onRequestClose,
+  onChangeAccount,
+  onSignOut,
+  signingOut,
+  userEmail,
+}: Props) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onRequestClose}>
+      <Pressable className="flex-1 bg-black/30" onPress={onRequestClose}>
+        <View className="flex-1 justify-end">
+          <Pressable className="rounded-t-[36px] border-[4px] border-black bg-[#FDF9F1] px-5 pt-5 pb-8">
+            <View className="mb-4 items-center">
+              <View className="h-2 w-20 rounded-full bg-[#B9987A]" />
+            </View>
+
+            <View className="relative mb-5">
+              <View className="absolute inset-0 translate-x-2 translate-y-2 rounded-[30px] bg-black" />
+              <View className="rounded-[30px] border-[3px] border-black bg-[#FFF7E8] p-5">
+                <View className="flex-row items-center">
+                  <View className="h-20 w-20 items-center justify-center rounded-full border-[4px] border-black bg-[#FDF9F1]">
+                    <Text className="text-3xl">🐱</Text>
+                  </View>
+
+                  <View className="ml-4 flex-1">
+                    <Text className="text-2xl font-black text-black">Mi cuenta</Text>
+                    <Text className="mt-1 text-base font-semibold text-[#5E5045]">
+                      {userEmail ?? 'Usuario autenticado'}
+                    </Text>
+                    <Text className="mt-2 text-sm font-medium text-[#7A6857]">
+                      Avatar provisional. Luego podrás subir tu foto.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View className="relative mb-4">
+              <View className="absolute inset-0 translate-x-2 translate-y-2 rounded-[28px] bg-black" />
+              <View className="rounded-[28px] border-[3px] border-black bg-[#F7E7C6] p-5">
+                <Text className="text-xs font-bold uppercase tracking-wide text-[#6B5747]">
+                  Opciones de cuenta
+                </Text>
+
+                <View className="mt-4 gap-3">
+                  <View className="rounded-2xl border-[3px] border-black bg-[#D9F2C7] px-4 py-4">
+                    <Text className="text-base font-black text-black">Perfil del profesor</Text>
+                    <Text className="mt-1 text-sm font-medium text-[#4C5B42]">
+                      Visualiza tu nombre, correo y futura foto de perfil.
+                    </Text>
+                  </View>
+
+                  <View className="rounded-2xl border-[3px] border-black bg-[#D7ECFF] px-4 py-4">
+                    <Text className="text-base font-black text-black">Configuraciones avanzadas</Text>
+                    <Text className="mt-1 text-sm font-medium text-[#44596A]">
+                      Apariencia, notificaciones, seguridad y preferencias. Solo visual por ahora.
+                    </Text>
+                  </View>
+
+                  <View className="rounded-2xl border-dashed border-black bg-[#FFE7BD] px-4 py-4">
+                    <Text className="text-base font-black text-black">Próximamente</Text>
+                    <Text className="mt-1 text-sm font-medium text-[#6E5735]">
+                      Cambiar avatar, editar nombre y administrar sesiones activas.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                accessibilityRole="button"
+                disabled={signingOut}
+                onPress={onChangeAccount}
+                activeOpacity={0.9}
+                className="flex-1 rounded-2xl border-[3px] border-black bg-[#A7D8FF] px-4 py-4"
+              >
+                <Text className="text-center text-sm font-black text-black">
+                  {signingOut ? 'Procesando...' : 'Cambiar cuenta'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                accessibilityRole="button"
+                disabled={signingOut}
+                onPress={onSignOut}
+                activeOpacity={0.9}
+                className="flex-1 rounded-2xl border-[3px] border-black bg-[#FFC9C2] px-4 py-4"
+              >
+                <Text className="text-center text-sm font-black text-black">Cerrar sesión</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              accessibilityRole="button"
+              activeOpacity={0.9}
+              onPress={onRequestClose}
+              className="mt-4 self-center rounded-full border-[3px] border-black bg-white px-5 py-2"
+            >
+              <Text className="text-sm font-black text-black">Cerrar panel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
