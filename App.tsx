@@ -2,8 +2,8 @@ import './global.css';
 import { useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
-import Auth from './components/Auth';
-import Home from './components/Home';
+import Auth from './screens/Auth';
+import Home from './screens/Home';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
