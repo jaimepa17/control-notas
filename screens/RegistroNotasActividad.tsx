@@ -428,7 +428,7 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
   const grupoItems = gruposFiltrados.map((item) => ({ id: item.id, nombre: item.nombre }));
   const actividadItems = actividades.map((item) => ({
     id: item.id,
-    nombre: `${item.nombre} (${roundTo2(Number(item.peso_porcentaje ?? 0))}%)`,
+    nombre: `${item.nombre} (${roundTo2(Number(item.peso_porcentaje ?? 0))} pts)`,
   }));
 
   return (
