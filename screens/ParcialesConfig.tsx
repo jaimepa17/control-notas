@@ -72,6 +72,9 @@ export default function ParcialesConfigScreen({
   grupo,
   onBack,
 }: ParcialesConfigScreenProps) {
+  const [resumenParcialById, setResumenParcialById] = useState<
+    Record<string, { bloques: number; actividades: number }>
+  >({});
   const [parciales, setParciales] = useState<Parcial[]>([]);
   const [bloques, setBloques] = useState<Bloque[]>([]);
   const [actividades, setActividades] = useState<Actividad[]>([]);
@@ -242,6 +245,65 @@ export default function ParcialesConfigScreen({
 
     void cargarActividades();
   }, [selectedBloqueId, cargarActividades]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const cargarResumenParciales = async () => {
+      if (parciales.length === 0) {
+        if (mounted) {
+          setResumenParcialById({});
+        }
+        return;
+      }
+
+      const resumenEntries = await Promise.all(
+        parciales.map(async (parcial) => {
+          const bloquesResult = await listBloquesByParcial(parcial.id);
+          if (!bloquesResult.ok) {
+            return [parcial.id, { bloques: 0, actividades: 0 }] as const;
+          }
+
+          const bloquesDelParcial = bloquesResult.data;
+          const bloquesCount = bloquesDelParcial.length;
+
+          if (bloquesCount === 0) {
+            return [parcial.id, { bloques: 0, actividades: 0 }] as const;
+          }
+
+          const actividadesPorBloque = await Promise.all(
+            bloquesDelParcial.map(async (bloque) => {
+              const actividadesResult = await listActividadesByBloque(bloque.id);
+              return actividadesResult.ok ? actividadesResult.data.length : 0;
+            })
+          );
+
+          const actividadesCount = actividadesPorBloque.reduce((acc, count) => acc + count, 0);
+          return [parcial.id, { bloques: bloquesCount, actividades: actividadesCount }] as const;
+        })
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setResumenParcialById(
+        resumenEntries.reduce<Record<string, { bloques: number; actividades: number }>>(
+          (acc, [parcialId, resumen]) => {
+            acc[parcialId] = resumen;
+            return acc;
+          },
+          {}
+        )
+      );
+    };
+
+    void cargarResumenParciales();
+
+    return () => {
+      mounted = false;
+    };
+  }, [parciales, bloques, actividades]);
 
   useRealtimeCollection<Parcial>({
     enabled: true,
@@ -474,6 +536,7 @@ export default function ParcialesConfigScreen({
   const renderParcial = ({ item, index }: { item: Parcial; index: number }) => {
     const selected = item.id === selectedParcialId;
     const pesoActual = roundTo2(Number(item.peso_porcentaje ?? 0));
+    const resumenParcial = resumenParcialById[item.id];
     const seleccionarParcial = () => {
       if (item.id === selectedParcialId) {
         return;
@@ -524,6 +587,9 @@ export default function ParcialesConfigScreen({
           <View className="mt-2">
             <Text className="text-sm font-black text-black">{pesoActual}%</Text>
             <Text className="mt-1 text-xs text-[#5E5045]">(ajustado automáticamente)</Text>
+            <Text className="mt-1 text-xs font-bold text-[#5E5045]">
+              Bloques: {resumenParcial?.bloques ?? 0} • Actividades: {resumenParcial?.actividades ?? 0}
+            </Text>
           </View>
         </TouchableOpacity>
       </View>

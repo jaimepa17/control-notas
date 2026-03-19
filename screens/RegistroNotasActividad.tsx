@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
-  FlatList,
+  Keyboard,
+  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -18,13 +18,9 @@ import { listBloquesByParcial } from '@/lib/services/bloquesService';
 import { listActividadesByBloque, type Actividad } from '@/lib/services/actividadesService';
 import { listEstudiantes, type Estudiante } from '@/lib/services/estudiantesService';
 import { listGrupoEstudiantesByGrupo } from '@/lib/services/grupoEstudiantesService';
-import {
-  createNota,
-  listNotasByActividad,
-  type Nota,
-  updateNota,
-} from '@/lib/services/notasService';
-import { useSingleFlight } from '@/lib/hooks/useSingleFlight';
+import { listNotasByActividad, createNota, updateNota, type Nota } from '@/lib/services/notasService';
+import EstudianteNotaCard from '@/components/EstudianteNotaCard';
+import AlertModal, { type AlertModalPayload, type AlertModalType } from '@/components/AlertModal';
 
 type RegistroNotasActividadProps = {
   onBack: () => void;
@@ -63,6 +59,8 @@ function normalizeNumberInput(raw: string): string {
 }
 
 export default function RegistroNotasActividad({ onBack }: RegistroNotasActividadProps) {
+  const isAndroid = Platform.OS === 'android';
+
   const [carreras, setCarreras] = useState<Carrera[]>([]);
   const [anios, setAnios] = useState<Anio[]>([]);
   const [asignaturas, setAsignaturas] = useState<Asignatura[]>([]);
@@ -80,8 +78,35 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
   const [loadingBase, setLoadingBase] = useState(true);
   const [loadingGrupoData, setLoadingGrupoData] = useState(false);
   const [loadingNotas, setLoadingNotas] = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [saveAllProgress, setSaveAllProgress] = useState({ actual: 0, total: 0 });
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [feedbackModal, setFeedbackModal] = useState<{
+    visible: boolean;
+    payload: AlertModalPayload;
+  }>({
+    visible: false,
+    payload: {
+      type: 'info',
+      title: '',
+      message: '',
+    },
+  });
 
-  const { run: runGuardarNotas, isRunning: savingNotas } = useSingleFlight();
+  const showFeedback = useCallback((type: AlertModalType, title: string, message: string) => {
+    setFeedbackModal({
+      visible: true,
+      payload: {
+        type,
+        title,
+        message,
+      },
+    });
+  }, []);
+
+  const closeFeedback = useCallback(() => {
+    setFeedbackModal((prev) => ({ ...prev, visible: false }));
+  }, []);
 
   const actividadSeleccionada = useMemo(
     () => actividades.find((item) => item.id === selectedActividadId) ?? null,
@@ -117,6 +142,16 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
     [carreras, anioSeleccionado]
   );
 
+  const notasByStudentId = useMemo(
+    () => new Map(notasActividad.map((nota) => [nota.estudiante_id, nota])),
+    [notasActividad]
+  );
+
+  const studentsScrollRef = useRef<ScrollView | null>(null);
+  const outerScrollRef = useRef<ScrollView | null>(null);
+  const studentYByIdRef = useRef<Record<string, number>>({});
+  const [studentsSectionY, setStudentsSectionY] = useState<number | null>(null);
+
   const maxPuntajeActividad = roundTo2(Number(actividadSeleccionada?.peso_porcentaje ?? 100));
 
   const cargarBase = useCallback(async () => {
@@ -129,28 +164,28 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
     ]);
 
     if (!carrerasResult.ok) {
-      Alert.alert('No se pudieron cargar las carreras', carrerasResult.error);
+      showFeedback('error', 'No se pudieron cargar las carreras', carrerasResult.error);
       setCarreras([]);
       setLoadingBase(false);
       return;
     }
 
     if (!aniosResult.ok) {
-      Alert.alert('No se pudieron cargar los años', aniosResult.error);
+      showFeedback('error', 'No se pudieron cargar los años', aniosResult.error);
       setAnios([]);
       setLoadingBase(false);
       return;
     }
 
     if (!asignaturasResult.ok) {
-      Alert.alert('No se pudieron cargar las asignaturas', asignaturasResult.error);
+      showFeedback('error', 'No se pudieron cargar las asignaturas', asignaturasResult.error);
       setAsignaturas([]);
       setLoadingBase(false);
       return;
     }
 
     if (!gruposResult.ok) {
-      Alert.alert('No se pudieron cargar los grupos', gruposResult.error);
+      showFeedback('error', 'No se pudieron cargar los grupos', gruposResult.error);
       setGrupos([]);
       setLoadingBase(false);
       return;
@@ -168,7 +203,7 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
       return gruposResult.data[0]?.id ?? null;
     });
     setLoadingBase(false);
-  }, []);
+  }, [showFeedback]);
 
   const cargarGrupoData = useCallback(async (grupoId: string) => {
     setLoadingGrupoData(true);
@@ -180,7 +215,7 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
     ]);
 
     if (!parcialesResult.ok) {
-      Alert.alert('No se pudieron cargar los parciales del grupo', parcialesResult.error);
+      showFeedback('error', 'No se pudieron cargar los parciales del grupo', parcialesResult.error);
       setActividades([]);
       setSelectedActividadId(null);
       setLoadingGrupoData(false);
@@ -188,14 +223,14 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
     }
 
     if (!grupoEstudiantesResult.ok) {
-      Alert.alert('No se pudo cargar la matrícula del grupo', grupoEstudiantesResult.error);
+      showFeedback('error', 'No se pudo cargar la matrícula del grupo', grupoEstudiantesResult.error);
       setEstudiantesGrupo([]);
       setLoadingGrupoData(false);
       return;
     }
 
     if (!estudiantesResult.ok) {
-      Alert.alert('No se pudieron cargar los estudiantes', estudiantesResult.error);
+      showFeedback('error', 'No se pudieron cargar los estudiantes', estudiantesResult.error);
       setEstudiantesGrupo([]);
       setLoadingGrupoData(false);
       return;
@@ -237,15 +272,16 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
       .sort((a, b) => a.nombre_completo.localeCompare(b.nombre_completo));
 
     setEstudiantesGrupo(estudiantesFiltrados);
+    setInputsByStudentId({});
     setLoadingGrupoData(false);
-  }, []);
+  }, [showFeedback]);
 
   const cargarNotasActividad = useCallback(async (actividadId: string) => {
     setLoadingNotas(true);
 
     const result = await listNotasByActividad(actividadId);
     if (!result.ok) {
-      Alert.alert('No se pudieron cargar las notas de la actividad', result.error);
+      showFeedback('error', 'No se pudieron cargar las notas de la actividad', result.error);
       setNotasActividad([]);
       setInputsByStudentId({});
       setLoadingNotas(false);
@@ -261,7 +297,7 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
     });
     setInputsByStudentId(map);
     setLoadingNotas(false);
-  }, []);
+  }, [showFeedback]);
 
   useEffect(() => {
     void cargarBase();
@@ -283,103 +319,160 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
   useEffect(() => {
     if (!selectedActividadId) {
       setNotasActividad([]);
-      setInputsByStudentId({});
       return;
     }
 
     void cargarNotasActividad(selectedActividadId);
   }, [selectedActividadId, cargarNotasActividad]);
 
-  const onChangePuntaje = useCallback((studentId: string, raw: string) => {
-    const clean = normalizeNumberInput(raw);
-    setInputsByStudentId((prev) => ({ ...prev, [studentId]: clean }));
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
-  const guardarNotas = async () => {
+  const onNotaSaved = useCallback(
+    (estudianteId: string, nota: Nota | null) => {
+      if (nota) {
+        setNotasActividad((prev) =>
+          prev.some((n) => n.estudiante_id === estudianteId)
+            ? prev.map((n) => (n.estudiante_id === estudianteId ? nota : n))
+            : [...prev, nota]
+        );
+        setInputsByStudentId((prev) => ({
+          ...prev,
+          [estudianteId]: String(nota.puntaje_obtenido),
+        }));
+      } else {
+        setNotasActividad((prev) => prev.filter((n) => n.estudiante_id !== estudianteId));
+        setInputsByStudentId((prev) => {
+          const next = { ...prev };
+          delete next[estudianteId];
+          return next;
+        });
+      }
+    },
+    []
+  );
+
+  const onInputChange = useCallback((estudianteId: string, value: string) => {
+    const clean = normalizeNumberInput(value);
+    setInputsByStudentId((prev) => ({ ...prev, [estudianteId]: clean }));
+  }, []);
+
+  const onStudentInputFocus = useCallback((estudianteId: string) => {
+    if (typeof studentsSectionY === 'number') {
+      outerScrollRef.current?.scrollTo({
+        y: Math.max(0, studentsSectionY - 14),
+        animated: true,
+      });
+    }
+
+    const y = studentYByIdRef.current[estudianteId];
+    if (typeof y !== 'number') {
+      return;
+    }
+
+    const innerTopPadding = isAndroid ? 88 : 56;
+
+    setTimeout(() => {
+      studentsScrollRef.current?.scrollTo({
+        y: Math.max(0, y - innerTopPadding),
+        animated: true,
+      });
+    }, 120);
+  }, [isAndroid, studentsSectionY]);
+
+  const guardarTodos = async () => {
     if (!actividadSeleccionada) {
-      Alert.alert('Selecciona una actividad', 'Debes elegir una actividad para registrar notas.');
+      showFeedback('warning', 'Selecciona una actividad', 'Debes elegir una actividad para registrar notas.');
       return;
     }
 
-    if (estudiantesGrupo.length === 0) {
-      Alert.alert('Grupo vacío', 'Este grupo no tiene estudiantes matriculados.');
+    const estudiantesConNotas = estudiantesGrupo.filter((est) => {
+      const raw = (inputsByStudentId[est.id] ?? '').trim();
+      return raw.length > 0;
+    });
+
+    if (estudiantesConNotas.length === 0) {
+      showFeedback('warning', 'Sin notas', 'Ingresa notas para al menos un estudiante antes de guardar todos.');
       return;
     }
 
-    await runGuardarNotas(async () => {
-      const notasByStudent = new Map(notasActividad.map((nota) => [nota.estudiante_id, nota]));
+    setIsSavingAll(true);
+    setSaveAllProgress({ actual: 0, total: estudiantesConNotas.length });
 
-      let creadas = 0;
-      let actualizadas = 0;
-      let omitidas = 0;
+    let guardadosExitoso = 0;
+    let erroresTotal = 0;
 
-      for (const estudiante of estudiantesGrupo) {
-        const raw = (inputsByStudentId[estudiante.id] ?? '').trim();
+    for (let i = 0; i < estudiantesConNotas.length; i++) {
+      const estudiante = estudiantesConNotas[i];
 
-        if (!raw) {
-          omitidas += 1;
-          continue;
-        }
+      const raw = (inputsByStudentId[estudiante.id] ?? '').trim();
+      const parsed = Number(raw.replace(',', '.'));
 
-        const parsed = Number(raw.replace(',', '.'));
-        if (Number.isNaN(parsed)) {
-          Alert.alert(
-            'Puntaje inválido',
-            `El puntaje de ${estudiante.nombre_completo} no es válido.`
-          );
-          return;
-        }
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > maxPuntajeActividad) {
+        erroresTotal++;
+        setSaveAllProgress((prev) => ({ ...prev, actual: i + 1 }));
+        continue;
+      }
 
-        const puntaje = roundTo2(parsed);
-        if (puntaje < 0 || puntaje > maxPuntajeActividad) {
-          Alert.alert(
-            'Puntaje fuera de rango',
-            `El puntaje de ${estudiante.nombre_completo} debe estar entre 0 y ${maxPuntajeActividad}.`
-          );
-          return;
-        }
+      const puntaje = roundTo2(parsed);
+      const notaExistente = notasByStudentId.get(estudiante.id);
 
-        const notaExistente = notasByStudent.get(estudiante.id);
-
+      try {
         if (!notaExistente) {
           const createResult = await createNota({
             actividad_id: actividadSeleccionada.id,
             estudiante_id: estudiante.id,
             puntaje_obtenido: puntaje,
           });
-
-          if (!createResult.ok) {
-            Alert.alert('No se pudo guardar una nota', createResult.error);
-            return;
+          if (createResult.ok) {
+            guardadosExitoso++;
+          } else {
+            erroresTotal++;
           }
-
-          creadas += 1;
-          continue;
+        } else {
+          const updateResult = await updateNota(notaExistente.id, {
+            puntaje_obtenido: puntaje,
+          });
+          if (updateResult.ok) {
+            guardadosExitoso++;
+          } else {
+            erroresTotal++;
+          }
         }
-
-        if (Number(notaExistente.puntaje_obtenido) === puntaje) {
-          omitidas += 1;
-          continue;
-        }
-
-        const updateResult = await updateNota(notaExistente.id, {
-          puntaje_obtenido: puntaje,
-        });
-
-        if (!updateResult.ok) {
-          Alert.alert('No se pudo actualizar una nota', updateResult.error);
-          return;
-        }
-
-        actualizadas += 1;
+      } catch (error) {
+        erroresTotal++;
       }
 
-      await cargarNotasActividad(actividadSeleccionada.id);
-      Alert.alert(
-        'Notas guardadas',
-        `Creadas: ${creadas} • Actualizadas: ${actualizadas} • Sin cambios: ${omitidas}`
+      setSaveAllProgress((prev) => ({ ...prev, actual: i + 1 }));
+    }
+
+    await cargarNotasActividad(actividadSeleccionada.id);
+    setIsSavingAll(false);
+    setSaveAllProgress({ actual: 0, total: 0 });
+
+    if (erroresTotal === 0) {
+      showFeedback('success', '¡Listo!', `Se guardaron exitosamente ${guardadosExitoso} nota(s).`);
+    } else {
+      showFeedback(
+        'warning',
+        'Guardado parcial',
+        `Se guardaron ${guardadosExitoso} nota(s). Hubo ${erroresTotal} error(es) o datos inválidos.`
       );
-    });
+    }
   };
 
   const renderChip = (
@@ -433,10 +526,16 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
 
   return (
     <View className="flex-1 bg-[#C5A07D] px-4 pt-12 pb-4">
-      <View className="relative mb-4 px-1">
+      <AlertModal
+        visible={feedbackModal.visible}
+        payload={feedbackModal.payload}
+        onClose={closeFeedback}
+      />
+
+      <View className="relative mb-3 px-1">
         <View className="relative">
-          <View className="absolute inset-0 translate-x-1.5 translate-y-2 rounded-[30px] bg-black" />
-          <View className="rounded-[30px] border-[4px] border-black bg-[#EBD7BF] px-5 py-3.5">
+          <View className="absolute inset-0 translate-x-1 translate-y-1.5 rounded-[24px] bg-black" />
+          <View className="rounded-[24px] border-[4px] border-black bg-[#EBD7BF] px-4 py-3">
             <TouchableOpacity
               accessibilityRole="button"
               activeOpacity={0.9}
@@ -446,9 +545,11 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
               <Text className="text-xs font-black text-black">← Volver</Text>
             </TouchableOpacity>
 
-            <Text className="mt-3 text-2xl font-black text-[#1E140D]">Registrar notas por actividad</Text>
-            <Text className="mt-1 text-sm font-semibold text-[#5E5045]">
-              Califica múltiples estudiantes de una sola actividad en un solo paso.
+            <Text className="mt-2 text-xl font-black text-[#1E140D]">
+              Registrar notas por actividad
+            </Text>
+            <Text className="mt-1 text-xs font-semibold text-[#5E5045]">
+              Calificación rápida por estudiante.
             </Text>
           </View>
         </View>
@@ -465,11 +566,12 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
             </View>
           ) : (
             <ScrollView
+              ref={outerScrollRef}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{
                 paddingHorizontal: 20,
                 paddingTop: 16,
-                paddingBottom: 140,
+                paddingBottom: keyboardHeight > 0 ? keyboardHeight + 180 : 140,
               }}
             >
               <View className="self-start rounded-full border-[3px] border-black bg-[#F3E7D5] px-5 py-2">
@@ -539,42 +641,93 @@ export default function RegistroNotasActividad({ onBack }: RegistroNotasActivida
               {loadingNotas ? (
                 <Text className="mt-4 text-sm font-semibold text-[#5E5045]">Cargando notas...</Text>
               ) : actividadSeleccionada && estudiantesGrupo.length > 0 ? (
-                <View className="mt-4">
-                  <Text className="text-sm font-black text-[#1E140D]">
-                    Estudiantes del grupo ({estudiantesGrupo.length})
-                  </Text>
+                <View
+                  className="mt-4 overflow-hidden rounded-2xl border-[3px] border-black bg-[#F5EADB]"
+                  onLayout={(event) => {
+                    setStudentsSectionY(event.nativeEvent.layout.y);
+                  }}
+                >
+                  <ScrollView
+                    ref={studentsScrollRef}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                    keyboardShouldPersistTaps="handled"
+                    stickyHeaderIndices={[0]}
+                    style={{ maxHeight: keyboardHeight > 0 ? 360 : 520 }}
+                    contentContainerStyle={{
+                      paddingHorizontal: 10,
+                      paddingTop: 0,
+                      paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 12,
+                      gap: 10,
+                    }}
+                  >
+                    {isAndroid ? (
+                      <View className="mx-[-10px] border-b-[3px] border-black bg-[#FFF7E8] px-3 py-2">
+                        <Text className="text-sm font-black text-[#1E140D]">
+                          Estudiantes del grupo ({estudiantesGrupo.length})
+                        </Text>
 
-                  <FlatList
-                    data={estudiantesGrupo}
-                    keyExtractor={(item) => item.id}
-                    scrollEnabled={false}
-                    contentContainerStyle={{ paddingTop: 10, gap: 10 }}
-                    renderItem={({ item }) => (
-                      <View className="rounded-2xl border-[3px] border-black bg-[#FFF7E8] px-4 py-3">
-                        <Text className="text-sm font-black text-black">{item.nombre_completo}</Text>
-                        <TextInput
-                          value={inputsByStudentId[item.id] ?? ''}
-                          onChangeText={(value) => onChangePuntaje(item.id, value)}
-                          keyboardType="decimal-pad"
-                          placeholder={`0 a ${maxPuntajeActividad}`}
-                          placeholderTextColor="#9F8B78"
-                          className="mt-2 rounded-xl border-[3px] border-black bg-white px-3 py-2 text-base font-bold text-black"
-                        />
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          activeOpacity={0.9}
+                          disabled={isSavingAll}
+                          onPress={() => {
+                            void guardarTodos();
+                          }}
+                          className="mt-2 w-full rounded-xl border-[3px] border-black bg-[#BDE9C7] px-4 py-2"
+                        >
+                          <Text className="text-center text-sm font-black text-black">
+                            {isSavingAll ? `Guardando ${saveAllProgress.actual}/${saveAllProgress.total}` : 'Guardar todo'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View className="mx-[-10px] flex-row items-center justify-between border-b-[3px] border-black bg-[#FFF7E8] px-3 py-2">
+                        <Text className="text-sm font-black text-[#1E140D]">
+                          Estudiantes del grupo ({estudiantesGrupo.length})
+                        </Text>
+
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          activeOpacity={0.9}
+                          disabled={isSavingAll}
+                          onPress={() => {
+                            void guardarTodos();
+                          }}
+                          className="rounded-xl border-[3px] border-black bg-[#BDE9C7] px-4 py-2"
+                        >
+                          <Text className="text-sm font-black text-black">
+                            {isSavingAll ? `Guardando ${saveAllProgress.actual}/${saveAllProgress.total}` : 'Guardar todo'}
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     )}
-                  />
 
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    activeOpacity={0.9}
-                    disabled={savingNotas}
-                    onPress={guardarNotas}
-                    className="mt-4 self-start rounded-xl border-[3px] border-black bg-[#BDE9C7] px-5 py-3"
-                  >
-                    <Text className="text-sm font-black text-black">
-                      {savingNotas ? 'Guardando notas...' : 'Guardar notas de la actividad'}
-                    </Text>
-                  </TouchableOpacity>
+                    {estudiantesGrupo.map((item) => {
+                      const notaExistente = notasByStudentId.get(item.id);
+
+                      return (
+                        <View
+                          key={item.id}
+                          onLayout={(event) => {
+                            studentYByIdRef.current[item.id] = event.nativeEvent.layout.y;
+                          }}
+                        >
+                          <EstudianteNotaCard
+                            estudiante={item}
+                            notaExistente={notaExistente}
+                            actividadId={actividadSeleccionada.id}
+                            maxPuntaje={maxPuntajeActividad}
+                            initialInputValue={inputsByStudentId[item.id] ?? ''}
+                            onInputChange={onInputChange}
+                            onInputFocus={onStudentInputFocus}
+                            onNotaSaved={onNotaSaved}
+                            onFeedback={showFeedback}
+                          />
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
                 </View>
               ) : actividadSeleccionada ? (
                 <Text className="mt-4 text-sm font-semibold text-[#5E5045]">

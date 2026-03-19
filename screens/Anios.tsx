@@ -137,11 +137,16 @@ export default function AniosScreen({ carrera, onBack, onOpenAsignaturas }: Anio
         return;
       }
 
-      const loadingMap: Record<string, boolean> = {};
+      const missingStatsMap: Record<string, boolean> = {};
       anios.forEach((anio) => {
-        loadingMap[anio.id] = true;
+        if (!statsByAnio[anio.id]) {
+          missingStatsMap[anio.id] = true;
+        }
       });
-      setStatsLoadingByAnio(loadingMap);
+
+      if (Object.keys(missingStatsMap).length > 0) {
+        setStatsLoadingByAnio((prev) => ({ ...prev, ...missingStatsMap }));
+      }
 
       const statsResult = await getAniosStatsByIds(anios.map((anio) => anio.id));
 
@@ -150,11 +155,18 @@ export default function AniosScreen({ carrera, onBack, onOpenAsignaturas }: Anio
       }
 
       if (statsResult.ok) {
-        setStatsByAnio(statsResult.data);
-      } else {
-        setStatsByAnio({});
+        setStatsByAnio((prev) => ({ ...prev, ...statsResult.data }));
       }
-      setStatsLoadingByAnio({});
+
+      if (Object.keys(missingStatsMap).length > 0) {
+        setStatsLoadingByAnio((prev) => {
+          const next = { ...prev };
+          Object.keys(missingStatsMap).forEach((id) => {
+            delete next[id];
+          });
+          return next;
+        });
+      }
     };
 
     void loadStats();
@@ -169,6 +181,7 @@ export default function AniosScreen({ carrera, onBack, onOpenAsignaturas }: Anio
     const deleting = isDeleting(item.id);
     const stats = statsByAnio[item.id];
     const statsLoading = !!statsLoadingByAnio[item.id];
+    const showStatsLoading = statsLoading && !stats;
 
     return (
       <View className="mb-4">
@@ -186,7 +199,7 @@ export default function AniosScreen({ carrera, onBack, onOpenAsignaturas }: Anio
                 Información del año
               </Text>
 
-              {statsLoading ? (
+              {showStatsLoading ? (
                 <Text className="mt-1 text-base font-semibold text-black">Cargando datos...</Text>
               ) : (
                 <>

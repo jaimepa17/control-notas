@@ -144,7 +144,7 @@ export default function EstudianteFormModal({
                     value={nombreCompleto}
                     onChangeText={setNombreCompleto}
                     editable={!submitting}
-                    placeholder="Ej: Maria Fernanda Perez"
+                    placeholder="Ej: Jose Perez Perez"
                     placeholderTextColor="#9F8B78"
                     className="text-base font-bold text-black"
                     autoCapitalize="words"

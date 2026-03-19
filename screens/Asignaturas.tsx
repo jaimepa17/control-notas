@@ -149,11 +149,16 @@ export default function AsignaturasScreen({
         return;
       }
 
-      const loadingMap: Record<string, boolean> = {};
+      const missingStatsMap: Record<string, boolean> = {};
       asignaturas.forEach((asignatura) => {
-        loadingMap[asignatura.id] = true;
+        if (!statsByAsignatura[asignatura.id]) {
+          missingStatsMap[asignatura.id] = true;
+        }
       });
-      setStatsLoadingByAsignatura(loadingMap);
+
+      if (Object.keys(missingStatsMap).length > 0) {
+        setStatsLoadingByAsignatura((prev) => ({ ...prev, ...missingStatsMap }));
+      }
 
       const statsResult = await getAsignaturasStatsByIds(
         asignaturas.map((asignatura) => asignatura.id)
@@ -164,11 +169,18 @@ export default function AsignaturasScreen({
       }
 
       if (statsResult.ok) {
-        setStatsByAsignatura(statsResult.data);
-      } else {
-        setStatsByAsignatura({});
+        setStatsByAsignatura((prev) => ({ ...prev, ...statsResult.data }));
       }
-      setStatsLoadingByAsignatura({});
+
+      if (Object.keys(missingStatsMap).length > 0) {
+        setStatsLoadingByAsignatura((prev) => {
+          const next = { ...prev };
+          Object.keys(missingStatsMap).forEach((id) => {
+            delete next[id];
+          });
+          return next;
+        });
+      }
     };
 
     void loadStats();
@@ -183,6 +195,7 @@ export default function AsignaturasScreen({
     const deleting = isDeleting(item.id);
     const stats = statsByAsignatura[item.id];
     const statsLoading = !!statsLoadingByAsignatura[item.id];
+    const showStatsLoading = statsLoading && !stats;
 
     return (
       <View className="mb-4">
@@ -200,7 +213,7 @@ export default function AsignaturasScreen({
                 Información de la asignatura
               </Text>
 
-              {statsLoading ? (
+              {showStatsLoading ? (
                 <Text className="mt-1 text-base font-semibold text-black">Cargando datos...</Text>
               ) : (
                 <>
