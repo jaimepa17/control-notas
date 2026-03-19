@@ -151,11 +151,16 @@ export default function GruposScreen({
         return;
       }
 
-      const loadingMap: Record<string, boolean> = {};
+      const missingStatsMap: Record<string, boolean> = {};
       grupos.forEach((grupo) => {
-        loadingMap[grupo.id] = true;
+        if (!statsByGrupo[grupo.id]) {
+          missingStatsMap[grupo.id] = true;
+        }
       });
-      setStatsLoadingByGrupo(loadingMap);
+
+      if (Object.keys(missingStatsMap).length > 0) {
+        setStatsLoadingByGrupo((prev) => ({ ...prev, ...missingStatsMap }));
+      }
 
       const statsResult = await getGruposStatsByIds(grupos.map((grupo) => grupo.id));
 
@@ -164,11 +169,18 @@ export default function GruposScreen({
       }
 
       if (statsResult.ok) {
-        setStatsByGrupo(statsResult.data);
-      } else {
-        setStatsByGrupo({});
+        setStatsByGrupo((prev) => ({ ...prev, ...statsResult.data }));
       }
-      setStatsLoadingByGrupo({});
+
+      if (Object.keys(missingStatsMap).length > 0) {
+        setStatsLoadingByGrupo((prev) => {
+          const next = { ...prev };
+          Object.keys(missingStatsMap).forEach((id) => {
+            delete next[id];
+          });
+          return next;
+        });
+      }
     };
 
     void loadStats();
@@ -184,6 +196,7 @@ export default function GruposScreen({
     const deleting = isDeleting(item.id);
     const stats = statsByGrupo[item.id];
     const statsLoading = !!statsLoadingByGrupo[item.id];
+    const showStatsLoading = statsLoading && !stats;
 
     return (
       <View className="mb-4">
@@ -202,12 +215,17 @@ export default function GruposScreen({
                 Información del grupo
               </Text>
 
-              {statsLoading ? (
+              {showStatsLoading ? (
                 <Text className="mt-1 text-base font-semibold text-black">Cargando datos...</Text>
               ) : (
-                <Text className="mt-1 text-base font-semibold text-black">
-                  {`Estudiantes: ${stats?.estudiantes ?? 0}`}
-                </Text>
+                <>
+                  <Text className="mt-1 text-base font-semibold text-black">
+                    {`Parciales: ${stats?.parciales ?? 0}  •  Bloques: ${stats?.bloques ?? 0}`}
+                  </Text>
+                  <Text className="mt-1 text-base font-semibold text-black">
+                    {`Actividades: ${stats?.actividades ?? 0}  •  Estudiantes: ${stats?.estudiantes ?? 0}`}
+                  </Text>
+                </>
               )}
             </View>
 

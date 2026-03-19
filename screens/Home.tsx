@@ -236,11 +236,17 @@ export default function Home({
         return;
       }
 
-      const loadingMap: Record<string, boolean> = {};
+      // Solo mostrar "Cargando" en cards sin datos previos para evitar parpadeo.
+      const missingStatsMap: Record<string, boolean> = {};
       carreras.forEach((carrera) => {
-        loadingMap[carrera.id] = true;
+        if (!statsByCarrera[carrera.id]) {
+          missingStatsMap[carrera.id] = true;
+        }
       });
-      setStatsLoadingByCarrera(loadingMap);
+
+      if (Object.keys(missingStatsMap).length > 0) {
+        setStatsLoadingByCarrera((prev) => ({ ...prev, ...missingStatsMap }));
+      }
 
       const statsResult = await getCarrerasStatsByIds(carreras.map((carrera) => carrera.id));
 
@@ -249,11 +255,18 @@ export default function Home({
       }
 
       if (statsResult.ok) {
-        setStatsByCarrera(statsResult.data);
-      } else {
-        setStatsByCarrera({});
+        setStatsByCarrera((prev) => ({ ...prev, ...statsResult.data }));
       }
-      setStatsLoadingByCarrera({});
+
+      if (Object.keys(missingStatsMap).length > 0) {
+        setStatsLoadingByCarrera((prev) => {
+          const next = { ...prev };
+          Object.keys(missingStatsMap).forEach((id) => {
+            delete next[id];
+          });
+          return next;
+        });
+      }
     };
 
     void loadStats();
@@ -279,6 +292,7 @@ export default function Home({
     const isDeleting = isDeletingCarrera(item.id);
     const stats = statsByCarrera[item.id];
     const statsLoading = !!statsLoadingByCarrera[item.id];
+    const showStatsLoading = statsLoading && !stats;
 
     return (
       <View className="mb-5">
@@ -303,7 +317,7 @@ export default function Home({
                 Información de la carrera
               </Text>
 
-              {statsLoading ? (
+              {showStatsLoading ? (
                 <Text className="mt-1 text-base font-semibold text-black">Cargando datos...</Text>
               ) : (
                 <>

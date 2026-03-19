@@ -250,9 +250,19 @@ export async function deleteNota(id: string): Promise<ServiceResult<{ id: string
     return fail('El id de la nota es obligatorio.');
   }
 
-  const { error } = await supabase.from('notas').delete().eq('id', id);
+  const { data, error } = await supabase
+    .from('notas')
+    .delete()
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+
   if (error) {
     return fail('No se pudo eliminar la nota.', error.message);
+  }
+
+  if (!data) {
+    return fail('No se pudo eliminar la nota. Verifica permisos o si ya fue eliminada.');
   }
 
   return ok({ id });
