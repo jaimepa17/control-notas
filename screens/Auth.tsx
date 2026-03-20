@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { signInWithEmail, signUpWithEmail } from '@/lib/authLogic';
 import NotificationBar from '@/components/NotificationBar';
+import PrivacyPolicyCard from '@/components/PrivacyPolicyCard';
 import { checkSupabaseAuthHealth } from '@/lib/serviceMonitor';
 import { useSingleFlight } from '@/lib/hooks/useSingleFlight';
 
@@ -40,6 +41,8 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [policyModalVisible, setPolicyModalVisible] = useState(false);
+  const [policyModalShowAccept, setPolicyModalShowAccept] = useState(true);
   const { run: runAuthAction, isRunning: loading } = useSingleFlight();
   const [notification, setNotification] = useState<NotificationState>({
     visible: false,
@@ -117,7 +120,7 @@ export default function Auth() {
     });
   };
 
-  const registrarse = async () => {
+  const submitRegistro = async () => {
     await runAuthAction(async () => {
       const result = await signUpWithEmail(email, password, confirmPassword);
 
@@ -137,15 +140,36 @@ export default function Auth() {
     });
   };
 
+  const registrarse = async () => {
+    const hasEmail = email.trim().length > 0;
+    const hasPassword = password.length > 0;
+    const hasConfirmPassword = confirmPassword.length > 0;
+
+    if (!hasEmail || !hasPassword || !hasConfirmPassword) {
+      showNotification('warning', 'Completa todos los campos del registro.', 4500);
+      return;
+    }
+
+    setPolicyModalShowAccept(true);
+    setPolicyModalVisible(true);
+  };
+
+  const aceptarPoliticaYRegistrar = async () => {
+    setPolicyModalVisible(false);
+    await submitRegistro();
+  };
+
   const goToSignup = () => {
     setPassword('');
     setConfirmPassword('');
+    setPolicyModalVisible(false);
     setScreen('signup');
   };
 
   const goToLogin = () => {
     setPassword('');
     setConfirmPassword('');
+    setPolicyModalVisible(false);
     setScreen('login');
   };
 
@@ -174,7 +198,7 @@ export default function Auth() {
               </View>
 
               <Text className="text-[32px] font-black tracking-tighter text-[#1E140D] mt-2">
-                Control de Notas
+                Profecita
               </Text>
               <Text className="mt-1 text-lg font-bold text-[#5E5045]">{title}</Text>
               <Text className="mt-1 mb-6 text-sm leading-5 font-semibold text-[#8A7968]">
@@ -254,7 +278,8 @@ export default function Auth() {
                     <TouchableOpacity
                       onPress={screen === 'login' ? iniciarSesion : registrarse}
                       activeOpacity={0.8}
-                      className="rounded-[20px] border-[3px] border-black bg-[#F8A9B7] px-5 py-3.5 items-center justify-center"
+                      disabled={loading}
+                      className="rounded-[20px] border-[3px] border-black px-5 py-3.5 items-center justify-center bg-[#F8A9B7]"
                     >
                       <Text className="text-[17px] font-black tracking-wide text-black">
                         {screen === 'login' ? 'Entrar a mi libreta' : 'Crear cuenta'}
@@ -287,8 +312,32 @@ export default function Auth() {
                       </TouchableOpacity>
                     )}
                   </View>
+
+                  {screen === 'login' ? (
+                    <Text className="mt-4 text-center text-xs font-semibold text-[#8A7968]">
+                      Al usar esta app, aceptas nuestra{' '}
+                      <Text
+                        className="underline font-bold text-[#5E5045]"
+                        onPress={() => {
+                          setPolicyModalShowAccept(false);
+                          setPolicyModalVisible(true);
+                        }}
+                      >
+                        política de privacidad
+                      </Text>
+                      .
+                    </Text>
+                  ) : null}
                 </>
               )}
+
+              <PrivacyPolicyCard
+                visible={policyModalVisible}
+                onAccept={policyModalShowAccept ? aceptarPoliticaYRegistrar : () => setPolicyModalVisible(false)}
+                onClose={() => setPolicyModalVisible(false)}
+                showAccept={policyModalShowAccept}
+                policyUrl="https://www.example.com/politica-de-privacidad"
+              />
               
               <View className="absolute -bottom-12 -left-3 z-40 items-center rotate-[16deg] opacity-95">
                 <Text className="text-5xl">🪴</Text>
