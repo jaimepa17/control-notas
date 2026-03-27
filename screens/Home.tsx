@@ -147,6 +147,12 @@ export default function Home() {
 
   const cerrarSesion = async () => {
     try {
+      console.log('[CERRAR SESION] Cerrando modal de cuenta...');
+      setAccountPanelVisible(false);
+      
+      // Esperar a que la animación del modal se complete
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       console.log('[CERRAR SESION] Iniciando cierre de sesión...');
       const { error } = await supabase.auth.signOut();
       console.log('[CERRAR SESION] Resultado de signOut:', { error: error?.message ?? 'sin error' });
