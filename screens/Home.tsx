@@ -146,16 +146,14 @@ export default function Home() {
   };
 
   const cerrarSesion = async () => {
-    await runSignOut(async () => {
-      try {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          Alert.alert('No se pudo cerrar sesión', error.message);
-        }
-      } catch (err) {
-        Alert.alert('Error', 'Ocurrió un error al cerrar sesión');
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        Alert.alert('No se pudo cerrar sesión', error.message);
       }
-    });
+    } catch (err) {
+      Alert.alert('Error', 'Ocurrió un error al cerrar sesión');
+    }
   };
 
   const cambiarCuenta = () => {
