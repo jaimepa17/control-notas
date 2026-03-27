@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -53,6 +53,7 @@ function roundTo2(value: number): number {
 
 export default function Reportes() {
   const navigation = useNavigation<NavigationProp>();
+  const scrollViewRef = useRef<ScrollView | null>(null);
 
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [selectedGrupoId, setSelectedGrupoId] = useState<string | null>(null);
@@ -497,11 +498,13 @@ export default function Reportes() {
             </View>
           ) : (
             <ScrollView
+              ref={scrollViewRef}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{
                 paddingHorizontal: 20,
                 paddingTop: 16,
-                paddingBottom: 140,
+                paddingBottom: 180,
+                minHeight: '100%',
               }}
             >
               <View className="self-start rounded-full border-[3px] border-black bg-[#F3E7D5] px-5 py-2">
