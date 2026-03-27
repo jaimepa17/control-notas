@@ -57,5 +57,4 @@ yarn-error.*
 /ios
 /android
 skills-lock.json
-.agents/
 package-lock.json
