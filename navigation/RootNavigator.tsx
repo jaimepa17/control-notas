@@ -23,8 +23,8 @@ export default function RootNavigator({ session }: RootNavigatorProps) {
       initialRouteName={session ? 'Home' : 'Auth'}
       screenOptions={{
         headerShown: false,
-        animation: 'default',
-        animationDuration: 250,
+        animation: 'slide_from_right',
+        animationDuration: 350,
         gestureEnabled: true,
         gestureDirection: 'horizontal',
         fullScreenGestureEnabled: true,
