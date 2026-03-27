@@ -154,13 +154,7 @@ export default function Home() {
       if (error) {
         Alert.alert('No se pudo cerrar sesión', error.message);
       } else {
-        console.log('[CERRAR SESION] Navegando a Auth con CommonActions...');
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 0,
-            routes: [{ name: 'Auth' }],
-          })
-        );
+        console.log('[CERRAR SESION] SignOut exitoso. Esperando navegación desde App.tsx...');
       }
     } catch (err) {
       console.log('[CERRAR SESION] Error inesperado:', err);

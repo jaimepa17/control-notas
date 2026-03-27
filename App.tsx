@@ -37,11 +37,13 @@ export default function App() {
     };
 
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      console.log('[APP] Session inicial:', currentSession ? 'autenticado' : 'no autenticado');
       setSession(currentSession);
       setSessionLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log('[APP] Auth state change:', event, newSession ? 'autenticado' : 'no autenticado');
       setSession(newSession);
     });
 
