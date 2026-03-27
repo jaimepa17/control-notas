@@ -1,6 +1,6 @@
 import './global.css';
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View, ActivityIndicator, Text, LogBox } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
@@ -11,6 +11,8 @@ import {
   Fredoka_500Medium,
   Fredoka_700Bold,
 } from '@expo-google-fonts/fredoka';
+
+LogBox.ignoreLogs(['InteractionManager has been deprecated']);
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
