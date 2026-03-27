@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import type { Session } from '@supabase/supabase-js';
 import type { RootStackParamList } from '@/types/navigation';
 import AuthScreen from '@/screens/Auth';
@@ -18,9 +20,26 @@ type RootNavigatorProps = {
 };
 
 export default function RootNavigatorStack({ session }: RootNavigatorProps) {
+  const navigation = useNavigation();
+  const prevSessionRef = useRef(session);
+
+  useEffect(() => {
+    const prevSession = prevSessionRef.current;
+    prevSessionRef.current = session;
+
+    if (prevSession && !session) {
+      console.log('[NAVIGATOR] Sesión cerrada, navegando a Auth...');
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'Auth' }],
+        })
+      );
+    }
+  }, [session, navigation]);
+
   return (
     <Stack.Navigator
-      key={session ? 'authenticated' : 'unauthenticated'}
       initialRouteName={session ? 'Home' : 'Auth'}
       screenOptions={{
         headerShown: false,
