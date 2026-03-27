@@ -147,14 +147,13 @@ export default function Home() {
 
   const cerrarSesion = async () => {
     await runSignOut(async () => {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        Alert.alert('No se pudo cerrar sesión', error.message);
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Auth' }],
-        });
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          Alert.alert('No se pudo cerrar sesión', error.message);
+        }
+      } catch (err) {
+        Alert.alert('Error', 'Ocurrió un error al cerrar sesión');
       }
     });
   };
